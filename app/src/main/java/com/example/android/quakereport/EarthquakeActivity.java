@@ -15,19 +15,26 @@
  */
 package com.example.android.quakereport;
 
+import android.app.LoaderManager;
 import android.app.SearchManager;
 import android.content.Intent;
+import android.content.Loader;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ListView;
 
 import java.util.ArrayList;
 
-public class EarthquakeActivity extends AppCompatActivity {
+public class EarthquakeActivity extends AppCompatActivity
+        implements LoaderManager.LoaderCallbacks<ArrayList<Earthquake>>{
 
     public static final String LOG_TAG = EarthquakeActivity.class.getName();
+    public static final String QUERY_STRING
+            = "http://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&eventtype=earthquake&orderby=time&minmag=6&limit=10";
+    private EarthquakeAdapter mAdapter;
 
 
     @Override
@@ -35,19 +42,44 @@ public class EarthquakeActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.earthquake_list);
 
-        final ArrayList<Earthquake> earthquakes = QueryUtils.extractEarthquakes();
-
-        EarthquakeAdapter itemsAdapter = new EarthquakeAdapter(this, earthquakes);
         ListView earthquakeListView = (ListView) findViewById(R.id.list);
-        earthquakeListView.setAdapter(itemsAdapter);
+
+        mAdapter = new EarthquakeAdapter(this, new ArrayList<Earthquake>());
+
+        earthquakeListView.setAdapter(mAdapter);
+
+        getLoaderManager().initLoader(0, null, this);
+        Log.v(LOG_TAG, "Init loader");
 
         earthquakeListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int position, long l) {
                 Intent intent = new Intent(Intent.ACTION_WEB_SEARCH);
-                intent.putExtra(SearchManager.QUERY, earthquakes.get(position).getUrl());
+                intent.putExtra(SearchManager.QUERY, mAdapter.getItem(position).getUrl());
                 startActivity(intent);
             }
         });
+    }
+
+    @Override
+    public Loader<ArrayList<Earthquake>> onCreateLoader(int id, Bundle args) {
+        Log.v(LOG_TAG, "On create loader");
+        return  new EarthquakeLoader(this, QUERY_STRING);
+    }
+
+    @Override
+    public void onLoadFinished(Loader<ArrayList<Earthquake>> loader, ArrayList<Earthquake> earthquakes) {
+        Log.v(LOG_TAG, "On load finished");
+        mAdapter.clear();
+
+        if (earthquakes != null && !earthquakes.isEmpty()) {
+            mAdapter.addAll(earthquakes);
+        }
+    }
+
+    @Override
+    public void onLoaderReset(Loader<ArrayList<Earthquake>> loader) {
+        Log.v(LOG_TAG, "On loader reset");
+        mAdapter.clear();
     }
 }
