@@ -17,11 +17,19 @@ package com.example.android.quakereport;
 
 import android.app.LoaderManager;
 import android.app.SearchManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.Loader;
+import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ListView;
@@ -35,17 +43,19 @@ public class EarthquakeActivity extends AppCompatActivity
 
     public static final String LOG_TAG = EarthquakeActivity.class.getName();
     public static final String QUERY_STRING
-            = "http://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&eventtype=earthquake&orderby=time&minmag=6&limit=10";
+            = "http://earthquake.usgs.gov/fdsnws/event/1/query";
     private EarthquakeAdapter mAdapter;
     private TextView mEmptyTextView;
     private ProgressBar mProgressBar;
-
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.earthquake_activity);
+
+        ConnectivityManager cm =
+                (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetwork = cm.getActiveNetworkInfo();
 
         ListView earthquakeListView = (ListView) findViewById(R.id.list);
         mEmptyTextView = (TextView) findViewById(R.id.empty_view);
@@ -55,11 +65,13 @@ public class EarthquakeActivity extends AppCompatActivity
 
         mAdapter = new EarthquakeAdapter(this, new ArrayList<Earthquake>());
         earthquakeListView.setAdapter(mAdapter);
-
-        getLoaderManager().initLoader(0, null, this);
-
-
-        Log.v(LOG_TAG, "Init loader");
+        if(activeNetwork == null || !activeNetwork.isConnectedOrConnecting()) {
+            mEmptyTextView.setText("No internet connection");
+            mProgressBar.setVisibility(View.GONE);
+        } else {
+            getLoaderManager().initLoader(0, null, this);
+            Log.v(LOG_TAG, "Init loader");
+        }
 
         earthquakeListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
@@ -73,8 +85,25 @@ public class EarthquakeActivity extends AppCompatActivity
 
     @Override
     public Loader<ArrayList<Earthquake>> onCreateLoader(int id, Bundle args) {
-        Log.v(LOG_TAG, "On create loader");
-        return  new EarthquakeLoader(this, QUERY_STRING);
+
+        SharedPreferences sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this);
+
+        String minMagnitude = sharedPrefs.getString(
+                getString(R.string.settings_min_magnitude_key),
+                getString(R.string.settings_min_magnitude_default));
+
+        String orderBy = sharedPrefs.getString(
+                getString(R.string.settings_order_by_key),
+                getString(R.string.settings_order_by_default));
+
+        Uri baseUri = Uri.parse(QUERY_STRING);
+        Uri.Builder uriBuilder = baseUri.buildUpon()
+                .appendQueryParameter("format", "geojson")
+                .appendQueryParameter("limit", "500")
+                .appendQueryParameter("minmag", minMagnitude)
+                .appendQueryParameter("orderby", orderBy);
+
+        return new EarthquakeLoader(this, uriBuilder.toString());
     }
 
     @Override
@@ -93,5 +122,22 @@ public class EarthquakeActivity extends AppCompatActivity
     public void onLoaderReset(Loader<ArrayList<Earthquake>> loader) {
         Log.v(LOG_TAG, "On loader reset");
         mAdapter.clear();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+        if (id == R.id.action_settings) {
+            Intent settingsIntent = new Intent(this, SettingsActivity.class);
+            startActivity(settingsIntent);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 }
